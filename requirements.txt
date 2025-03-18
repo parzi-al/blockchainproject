@@ -5,4 +5,5 @@ pycryptodome
 websockets
 requests
 jsonpickle
+gunicorn
 eventlet

@@ -1,28 +1,38 @@
-import socket
-from encryption import AESCipher
-aes = AESCipher("SecureKey123456")  # Same key as server
+import requests
+import socketio
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(("127.0.0.1", 5555))  # Replace with the server's IP
+SERVER_URL = "http://127.0.0.1:5000"
 
-name = input("Enter your device name: ")
-client.send(name.encode())
+# Initialize Socket.IO client
+sio = socketio.Client()
 
-def receive_messages():
-    while True:
-        try:
-            message = client.recv(1024).decode()
-            print("\n" + message)
-        except:
-            break
+name = input("Enter your name: ")
+requests.post(f"{SERVER_URL}/connect", json={"name": name})
 
-# Start receiving messages in a separate thread
-import threading
-threading.Thread(target=receive_messages, daemon=True).start()
+@sio.event
+def connect():
+    print("[Connected to Server]")
+
+@sio.on("new_message")
+def receive_message(data):
+    if data["receiver"] == name:  # Show only messages meant for this client
+        print(f"\n[New Message] {data['sender']} → {data['receiver']}: {data['message']}\n")
+
+sio.connect(SERVER_URL)
+
+def send_message():
+    receiver = input("Receiver's name: ")
+    message = input("Message: ")
+    response = requests.post(f"{SERVER_URL}/send", json={"sender": name, "receiver": receiver, "message": message})
+    print(response.json())
 
 while True:
-    receiver = input("\nEnter receiver's name: ")
-    message = input("Enter message: ")
+    choice = input("\n1. Send Message\n2. Exit\nChoice: ")
+    if choice == "1":
+        send_message()
+    elif choice == "2":
+        break
+    else:
+        print("Invalid choice, try again.")
 
-    encrypted_message = aes.encrypt(message)
-    client.send(f"{name}|{receiver}|{encrypted_message}".encode())
+sio.disconnect()

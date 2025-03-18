@@ -1,7 +1,7 @@
 flask
 flask-socketio
 cryptography
-pycryptodome
+pycryptodomex
 websockets
 requests
 jsonpickle

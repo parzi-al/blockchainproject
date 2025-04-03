@@ -52,8 +52,8 @@
 
             <div class="col-md-4">
                 <div class="card p-3">
-                    <h5>Usage Frequency</h5>
-                    <canvas id="usageChart" class="graph-container"></canvas>
+                    <h5>Active Users Over Time</h5>
+                    <canvas id="activeUsersChart" class="graph-container"></canvas>
                 </div>
             </div>
         </div>
@@ -72,17 +72,22 @@
 
     <script>
         var socket = io();
-        var usageChart;
+        var activeUsersChart;
+        var activeUsersHistory = [];
         var messageHistory = [];
 
         function fetchClients() {
             $.get("/clients", function(data) {
-                $("#clientCount").text(Object.keys(data).length);
+                let clientCount = Object.keys(data).length;
+                $("#clientCount").text(clientCount);
+
                 let clientsList = "";
                 for (let name in data) {
                     clientsList += `<li class="list-group-item">${name} - ${data[name]}</li>`;
                 }
                 $("#clients").html(clientsList);
+
+                updateActiveUsersGraph(clientCount);
             });
         }
 
@@ -95,33 +100,38 @@
                     msgList += `<li class="list-group-item"><strong>${msg.sender} → ${msg.receiver}:</strong> ${msg.message} <em>(${msg.timestamp})</em></li>`;
                 });
                 $("#messages").html(msgList);
-                updateGraph();
             });
         }
 
-        function updateGraph() {
-            let messageCounts = {};
-            messageHistory.forEach(msg => {
-                let date = msg.timestamp.split(" ")[0];
-                messageCounts[date] = (messageCounts[date] || 0) + 1;
-            });
+        function updateActiveUsersGraph(clientCount) {
+            let now = new Date().toLocaleTimeString();
+            activeUsersHistory.push({ time: now, count: clientCount });
 
-            let labels = Object.keys(messageCounts);
-            let values = Object.values(messageCounts);
+            if (activeUsersHistory.length > 10) {
+                activeUsersHistory.shift();  // Keep only last 10 records
+            }
 
-            if (usageChart) usageChart.destroy();
-            let ctx = document.getElementById("usageChart").getContext("2d");
-            usageChart = new Chart(ctx, {
+            let labels = activeUsersHistory.map(item => item.time);
+            let values = activeUsersHistory.map(item => item.count);
+
+            if (activeUsersChart) activeUsersChart.destroy();
+            let ctx = document.getElementById("activeUsersChart").getContext("2d");
+            activeUsersChart = new Chart(ctx, {
                 type: "line",
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: "Messages Sent",
+                        label: "Active Users",
                         data: values,
-                        backgroundColor: "rgba(54, 162, 235, 0.2)",
-                        borderColor: "rgba(54, 162, 235, 1)",
+                        backgroundColor: "rgba(255, 99, 132, 0.2)",
+                        borderColor: "rgba(255, 99, 132, 1)",
                         borderWidth: 2
                     }]
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
                 }
             });
         }

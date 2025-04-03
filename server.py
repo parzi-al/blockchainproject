@@ -2,6 +2,20 @@ from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
 import json, os, time, base64, hashlib
 from Cryptodome.Cipher import AES
+from web3 import Web3
+
+# Connect to Ganache (Local Blockchain)
+GANACHE_URL = "http://127.0.0.1:7545"
+CONTRACT_ADDRESS = "0xE49cC01d306279743A4075DB76B9aFD44E68Fa1d"
+PRIVATE_KEY = "0x4be21f19aa1319825a5a270df42251874ab75fb73e60d8c8c35b18bda9cb6e6c"
+ACCOUNT_ADDRESS = "0xc277768203cB66A3672C190b52B0BB7037a3eEA4"
+
+web3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+
+with open("MessageStoreABI.json") as f:
+    contract_abi = json.load(f)
+
+contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -56,6 +70,16 @@ blockchain = Blockchain()
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html")
+@app.route("/disconnect", methods=["POST"])
+def disconnect_client():
+    data = request.json
+    client_name = data.get("name")
+
+    if client_name in clients:
+        del clients[client_name]
+        socketio.emit("update_clients", clients)  # Notify all clients
+        return jsonify({"status": "Disconnected"}), 200
+    return jsonify({"error": "Client not found"}), 404
 
 @app.route("/connect", methods=["POST"])
 def connect_client():
@@ -80,9 +104,24 @@ def send_message():
 
     encrypted_message = aes.encrypt(message)
     blockchain.add_message(sender, receiver, encrypted_message)
-    socketio.emit("new_message", {"sender": sender, "receiver": receiver, "message": message})
 
-    return jsonify({"status": "Message stored"})
+    # Send transaction to smart contract on Ganache
+    txn = contract.functions.storeMessage(receiver, encrypted_message).build_transaction({
+        "from": ACCOUNT_ADDRESS,
+        "nonce": web3.eth.get_transaction_count(ACCOUNT_ADDRESS),
+        "gas": 2000000,
+        "gasPrice": web3.to_wei('5', 'gwei')
+    })
+
+    signed_txn = web3.eth.account.sign_transaction(txn, PRIVATE_KEY)
+    tx_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+
+    socketio.emit("new_message", {
+        "sender": sender, "receiver": receiver, "message": message, "tx_hash": tx_hash.hex()
+    })
+
+    return jsonify({"status": "Message stored", "tx_hash": tx_hash.hex()})
+
 
 @app.route("/messages", methods=["GET"])
 def get_messages():
